@@ -286,7 +286,7 @@ int multiply_f(int a, int b) { ;; multiply with factor
   }
 
   if (op == op::get_jetton_minter_addr){
-    throw_unless(error::jetton_wallet_already_specified, equal_slices(jetton_wallet_addr, null_addr()));
+    ;; throw_unless(error::jetton_wallet_already_specified, equal_slices(jetton_wallet_addr, null_addr()));
     throw_unless(error::unauthorized_change_withdraw_request, equal_slice_bits(sender_address, admin_address));
     raw_reserve(min_tons_for_storage , 0);
     slice jetton_minter = in_msg_body~load_msg_addr();
@@ -297,13 +297,14 @@ int multiply_f(int a, int b) { ;; multiply with factor
                               .end_cell();
     send_simple_message(0, jetton_minter, msg_body, 64);
     save_data(total_supply, jetton_balance, state, price, cap, withdraw_minimum, start_date, end_date, admin_address, jetton_minter, content, jetton_wallet_code);
+    return ();
   }
 
   if (op == op::get_jetton_wallet_addr){
     throw_unless(error::unauthorized_change_jetton_wallet_request, equal_slices(sender_address, jetton_wallet_addr));
     slice new_jetton_wallet_addr = in_msg_body~load_msg_addr();
     save_data(total_supply, jetton_balance, state, price, cap, withdraw_minimum, start_date, end_date, admin_address, new_jetton_wallet_addr, content, jetton_wallet_code);
-
+    return ();
   }
 
   throw(error::unknown_op);
@@ -331,4 +332,9 @@ int get_jetton_amount(int ton_amount) method_id {
 slice get_wallet_address(slice owner_address) method_id {
   (int total_supply, int jetton_balance, int state, int price, int cap, int withdraw_minimum, int start_date, int end_date, slice admin_address, slice jetton_wallet_addr, cell content, cell jetton_wallet_code) = load_data();
   return calc_user_wallet(owner_address, my_address(), jetton_wallet_code);
+}
+
+(slice) get_jtn_wallet_address() method_id {
+  (int total_supply, int jetton_balance, int state, int price, int cap, int withdraw_minimum, int start_date, int end_date, slice admin_address, slice jetton_wallet_addr, cell content, cell jetton_wallet_code) = load_data();
+  return jetton_wallet_addr;
 }

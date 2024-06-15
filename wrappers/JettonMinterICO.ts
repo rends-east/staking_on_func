@@ -1,4 +1,4 @@
-import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode, toNano } from '@ton/core';
+import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode, toNano, address } from '@ton/core';
 
 export type JettonMinterICOContent = {
     type: 0 | 1,
@@ -11,12 +11,14 @@ export function jettonMinterConfigToCell(config: JettonMinterICOConfig): Cell {
     return beginCell()
         .storeCoins(0)
         .storeBit(config.state)
+        .storeCoins(0)
         .storeUint(config.price, 64)
         .storeUint(config.cap, 64)
         .storeCoins(1000000000)
         .storeUint(config.ico_start_date, 32)
         .storeUint(config.ico_end_date, 32)
         .storeAddress(config.admin)
+        .storeAddress(address("0:0000000000000000000000000000000000000000000000000000000000000000"))
         .storeRef(config.content)
         .storeRef(config.wallet_code)
         .endCell();
@@ -42,9 +44,16 @@ export class JettonMinterICO implements Contract {
         return new JettonMinterICO(contractAddress(workchain, init), init);
     }
 
-    async sendDeploy(provider: ContractProvider, via: Sender, value: bigint) {
+    static getWalletMessage(jetton_minter: Address) {
+        return beginCell().storeUint(0xc2e7027b, 32).storeUint(0, 64) // op, queryId
+            .storeAddress(jetton_minter)
+            .endCell();
+    }
+
+    async sendDeploy(provider: ContractProvider, via: Sender, value: bigint, jetton_minter: Address) {
         await provider.internal(via, {
             value,
+            body: JettonMinterICO.getWalletMessage(jetton_minter),
             sendMode: SendMode.PAY_GAS_SEPARATELY
         });
     }

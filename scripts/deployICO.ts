@@ -12,6 +12,7 @@ export async function run(provider: NetworkProvider) {
     const cap = process.env.JETTON_CAP ? BigInt(process.env.JETTON_CAP).valueOf() : BigInt(1000000000);
     const ico_start_date = process.env.JETTON_ICO_START_DATE ? Number(process.env.JETTON_ICO_START_DATE).valueOf() : 0;
     const ico_end_date = process.env.JETTON_ICO_END_DATE ? Number(process.env.JETTON_ICO_END_DATE).valueOf() : 0;
+    const jetton_minter = address(process.env.JETTON_MINTER ? process.env.JETTON_MINTER : "");
 
     const minter = provider.open(
         JettonMinterICO.createFromConfig(
@@ -29,7 +30,7 @@ export async function run(provider: NetworkProvider) {
         )
     );
 
-    await minter.sendDeploy(provider.sender(), toNano('0.05'));
+    await minter.sendDeploy(provider.sender(), toNano('0.1'), jetton_minter);
 
     await provider.waitForDeploy(minter.address);
 
