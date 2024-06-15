@@ -123,6 +123,7 @@ int multiply_f(int a, int b) { ;; multiply with factor
     throw_unless(error::ico_closed, (start_date == 0) | (start_date < now()));
     throw_unless(error::ico_expired, (end_date == 0) | (end_date > now()));
     throw_unless(error::paused, state == 0);
+    raw_reserve(min_tons_for_storage , 0);
 
     int buy_amount = in_msg_body~load_coins();
     slice buyer_addr = in_msg_body~load_msg_addr();
@@ -143,9 +144,10 @@ int multiply_f(int a, int b) { ;; multiply with factor
                         .store_uint(0, 1) ;; no forward_payload, 1 bit
                         .end_cell();
     jetton_balance += buy_amount;
+    mint_tokens(sender_address, jetton_wallet_code, min_tons_for_storage, mint_request);
+    save_data(total_supply + jetton_amount, jetton_balance, state, price, cap, withdraw_minimum, start_date, end_date, admin_address, jetton_wallet_addr, content, jetton_wallet_code);
     if (jetton_balance > withdraw_minimum)
     {
-      raw_reserve(min_tons_for_storage , 0);
       cell message_body = create_simple_transfer_body(query_id, 0, jetton_balance, admin_address).end_cell();
       var msg = begin_cell()
                   .store_msg_flag(msg_flag::bounceable)
@@ -155,8 +157,6 @@ int multiply_f(int a, int b) { ;; multiply with factor
       jetton_balance = 0;
       send_raw_message(msg.end_cell(), CARRY_REMAINING_BALANCE);
     }
-    mint_tokens(sender_address, jetton_wallet_code, min_tons_for_storage, mint_request);
-    save_data(total_supply + jetton_amount, jetton_balance, state, price, cap, withdraw_minimum, start_date, end_date, admin_address, jetton_wallet_addr, content, jetton_wallet_code);
     return ();
   }
 
@@ -288,15 +288,15 @@ int multiply_f(int a, int b) { ;; multiply with factor
   if (op == op::get_jetton_minter_addr){
     ;; throw_unless(error::jetton_wallet_already_specified, equal_slices(jetton_wallet_addr, null_addr()));
     throw_unless(error::unauthorized_change_withdraw_request, equal_slice_bits(sender_address, admin_address));
-    raw_reserve(min_tons_for_storage , 0);
+    raw_reserve(min_tons_for_storage, 0);
     slice jetton_minter = in_msg_body~load_msg_addr();
     cell msg_body = begin_cell().store_uint(op::provide_wallet_address, 32)
                               .store_uint(query_id, 64)
                               .store_slice(my_address())
                               .store_uint(0, 1)
                               .end_cell();
-    send_simple_message(0, jetton_minter, msg_body, 64);
     save_data(total_supply, jetton_balance, state, price, cap, withdraw_minimum, start_date, end_date, admin_address, jetton_minter, content, jetton_wallet_code);
+    send_simple_message(100000000, jetton_minter, msg_body, 0);
     return ();
   }
 

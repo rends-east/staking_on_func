@@ -149,7 +149,7 @@ export class JettonMinterICO implements Contract {
             .endCell();
     }
 
-    async sendBuy(provider: ContractProvider, via: Sender, value: bigint) {
+    async sendBuy(provider: ContractProvider, via: Sender, value: bigint, wallet_addr: Address) {
         await provider.internal(via, {
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: JettonMinterICO.buyMessage(),
@@ -213,6 +213,12 @@ export class JettonMinterICO implements Contract {
     async getAdminAddress(provider: ContractProvider) {
         let res = await this.getJettonData(provider);
         return res.adminAddress;
+    }
+
+    async getJtnWalletAddress(provider: ContractProvider) {
+        let res = await provider.get('get_jtn_wallet_address', []);
+        let JtnWalletAddress = res.stack.readAddress();
+        return JtnWalletAddress;
     }
 
     async getContent(provider: ContractProvider) {

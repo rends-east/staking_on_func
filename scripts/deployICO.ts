@@ -30,7 +30,7 @@ export async function run(provider: NetworkProvider) {
         )
     );
 
-    await minter.sendDeploy(provider.sender(), toNano('0.1'), jetton_minter);
+    await minter.sendDeploy(provider.sender(), toNano('0.2'), jetton_minter);
 
     await provider.waitForDeploy(minter.address);
 

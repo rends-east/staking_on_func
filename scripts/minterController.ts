@@ -1,8 +1,10 @@
 import { Address, beginCell, Cell, fromNano, OpenedContract, toNano, } from '@ton/core';
 import { compile, sleep, NetworkProvider, UIProvider, } from '@ton/blueprint';
 import { JettonMinterICO, jettonContentToCell, } from '../wrappers/JettonMinterICO';
+import { JettonWallet, } from '../wrappers/JettonWallet';
 import { promptBool, promptAmount, promptAddress, displayContentCell, waitForTransaction, promptUrl, } from '../wrappers/utils';
 let minterICOContract: OpenedContract<JettonMinterICO>;
+let jetton_wallet: OpenedContract<JettonWallet>;
 
 const adminActions = ['Buy', 'Mint', 'Change admin', 'Change content', 'Change state', 'Withdrawal'];
 const userActions  = ['Info', 'Quit'];
@@ -204,10 +206,18 @@ const buyAction = async (provider: NetworkProvider, ui: UIProvider) => {
     const sender = provider.sender();
     let retry: boolean;
     let amountToBuy: string;
+    let wallet_addr: Address;
 
     do {
         retry = false;
-        amountToBuy = await promptAmount('Please provide TON amount in decimal form:', ui);
+        amountToBuy = await promptAmount('Please provide jetton amount in decimal form:', ui);
+        ui.write(`Buying on ${amountToBuy}\n`);
+        retry = !(await promptBool('Is it ok?(yes/no)', ['yes', 'no'], ui));
+    } while (retry);
+
+    do {
+        retry = false;
+        wallet_addr = await promptAddress('Please provide jetton wallet address', ui);
         ui.write(`Buying on ${amountToBuy}\n`);
         retry = !(await promptBool('Is it ok?(yes/no)', ['yes', 'no'], ui));
     } while (retry);
@@ -218,8 +228,12 @@ const buyAction = async (provider: NetworkProvider, ui: UIProvider) => {
 
     if (curState.last === null)
         throw ("Last transaction can't be null on deployed contract");
+    
+    jetton_wallet = provider.open(JettonWallet.createFromAddress(wallet_addr));
 
-    const res = await minterICOContract.sendBuy(sender, toNano(amountToBuy));
+    const buying_cell = beginCell().storeAddress(sender.address).endCell();
+
+    const res = await jetton_wallet.sendTransfer(sender, toNano("0.25"), toNano(amountToBuy), minterICOContract.address, minterICOContract.address, buying_cell, toNano("0.2"), beginCell().endCell());
     const gotTrans = await waitForTransaction(provider,
         minterICOContract.address,
         curState.last.lt,
