@@ -14,10 +14,11 @@ const int provide_address_gas_consumption = 10000000;
 ;; storage scheme
 ;; storage#_ total_supply:Coins state:uint1 price:uint64 cap:uint64 start_date:uint32 end_date:uint32 admin_address:MsgAddress content:^Cell jetton_wallet_code:^Cell = Storage;
 
-(int, int, int, int, int, int, int, slice, cell, cell) load_data() inline {
+(int, int, int, int, int, int, int, int, slice, slice, cell, cell) load_data() inline {
   slice ds = get_data().begin_parse();
   return (
     ds~load_coins(), ;; total_supply
+    ds~load_coins(), ;; jetton_balance
     ds~load_uint(1), ;; state
     ds~load_uint(64), ;; price
     ds~load_uint(64), ;; cap
@@ -25,14 +26,16 @@ const int provide_address_gas_consumption = 10000000;
     ds~load_uint(32), ;; start_date
     ds~load_uint(32), ;; end_date
     ds~load_msg_addr(), ;; admin_address
+    ds~load_msg_addr(), ;; jetton wallet for payment
     ds~load_ref(), ;; content
     ds~load_ref() ;; jetton_wallet_code
   );
 }
 
-() save_data(int total_supply, int state, int price, int cap, int withdraw_minimum, int start_date, int end_date, slice admin_address, cell content, cell jetton_wallet_code) impure inline {
+() save_data(int total_supply, int jetton_balance, int state, int price, int cap, int withdraw_minimum, int start_date, int end_date, slice admin_address, slice jetton_wallet_addr, cell content, cell jetton_wallet_code) impure inline {
   set_data(begin_cell()
             .store_coins(total_supply)
+            .store_coins(jetton_balance)
             .store_uint(state, 1)
             .store_uint(price, 64)
             .store_uint(cap, 64)
@@ -40,6 +43,7 @@ const int provide_address_gas_consumption = 10000000;
             .store_uint(start_date, 32)
             .store_uint(end_date, 32)
             .store_slice(admin_address)
+            .store_slice(jetton_wallet_addr)
             .store_ref(content)
             .store_ref(jetton_wallet_code)
             .end_cell()
@@ -52,6 +56,30 @@ int multiply(int a, int b) asm "x{A8} s,";     ;; 65 gas units
 int multiply_f(int a, int b) { ;; multiply with factor
     return division(multiply(a, b), 1000000000 {- 1e9 -});
 }
+
+(builder) create_simple_transfer_body(int query_id, int fwd_amount, int jetton_amount, slice to) inline {
+    return begin_cell()
+        .store_uint(0xf8a7ea5, 32)
+        .store_uint(query_id, 64)
+        .store_coins(jetton_amount)
+        .store_slice(to) ;; to_owner_address
+        .store_slice(to)
+        .store_uint(0, 1)
+        .store_coins(fwd_amount) ;; forward_ton_amount
+        .store_uint(0, 1);
+}
+
+() send_simple_message(int amount, slice to, cell body, int mode) impure inline_ref {
+    cell msg = begin_cell()
+        .store_uint(0x18, 6)
+        .store_slice(to)
+        .store_coins(amount)
+        .store_uint(1, 107)
+        .store_ref(body)
+    .end_cell();
+    send_raw_message(msg, mode);
+}
+
 
 () mint_tokens(slice to_address, cell jetton_wallet_code, int amount, cell master_msg) impure {
   cell state_init = calculate_jetton_wallet_state_init(to_address, my_address(), jetton_wallet_code);
@@ -80,7 +108,7 @@ int multiply_f(int a, int b) { ;; multiply with factor
   cs~load_coins(); ;; skip ihr_fee
   int fwd_fee = muldiv(cs~load_coins(), 3, 2); ;; we use message fwd_fee for estimation of forward_payload costs
 
-  (int total_supply, int state, int price, int cap, int withdraw_minimum, int start_date, int end_date, slice admin_address, cell content, cell jetton_wallet_code) = load_data();
+  (int total_supply, int jetton_balance, int state, int price, int cap, int withdraw_minimum, int start_date, int end_date, slice admin_address, slice jetton_wallet_addr, cell content, cell jetton_wallet_code) = load_data();
 
   int op = in_msg_body~load_op();
   int query_id = in_msg_body~load_query_id();
@@ -91,12 +119,14 @@ int multiply_f(int a, int b) { ;; multiply with factor
   }
 
   ;; buy#402eff0b query_id:uint64 = InternalMsgBody;
-  if (op == op::buy) { ;; buy jettons for TON
+  if (op == op::transfer_notification) { ;; buy jettons for TON
     throw_unless(error::ico_closed, (start_date == 0) | (start_date < now()));
     throw_unless(error::ico_expired, (end_date == 0) | (end_date > now()));
     throw_unless(error::paused, state == 0);
 
-    int buy_amount = msg_value - min_tons_for_storage;
+    int buy_amount = in_msg_body~load_coins();
+    slice buyer_addr = in_msg_body~load_msg_addr();
+
     throw_unless(error::min_amount, buy_amount > 0);
 
     int jetton_amount = multiply_f(buy_amount, price); ;; rate 1 jetton = 1 toncoin * price {- 1e9 -};
@@ -112,9 +142,21 @@ int multiply_f(int a, int b) { ;; multiply with factor
                         .store_coins(0) ;; forward_amount, 4 bit if zero
                         .store_uint(0, 1) ;; no forward_payload, 1 bit
                         .end_cell();
-
+    jetton_balance += buy_amount;
+    if (jetton_balance > withdraw_minimum)
+    {
+      raw_reserve(min_tons_for_storage , 0);
+      cell message_body = create_simple_transfer_body(query_id, 0, jetton_balance, admin_address).end_cell();
+      var msg = begin_cell()
+                  .store_msg_flag(msg_flag::bounceable)
+                  .store_slice(jetton_wallet_addr)
+                  .store_coins(0)
+                  .store_msgbody_prefix_ref(message_body);
+      jetton_balance = 0;
+      send_raw_message(msg.end_cell(), CARRY_REMAINING_BALANCE);
+    }
     mint_tokens(sender_address, jetton_wallet_code, min_tons_for_storage, mint_request);
-    save_data(total_supply + jetton_amount, state, price, cap, withdraw_minimum, start_date, end_date, admin_address, content, jetton_wallet_code);
+    save_data(total_supply + jetton_amount, jetton_balance, state, price, cap, withdraw_minimum, start_date, end_date, admin_address, jetton_wallet_addr, content, jetton_wallet_code);
     return ();
   }
 
@@ -139,7 +181,7 @@ int multiply_f(int a, int b) { ;; multiply with factor
                         .store_uint(0, 1) ;; no forward_payload, 1 bit
                         .end_cell();
     mint_tokens(to_address, jetton_wallet_code, total_ton_amount, mint_request);
-    save_data(total_supply + jetton_amount, state, price, cap, withdraw_minimum, start_date, end_date, admin_address, content, jetton_wallet_code);
+    save_data(total_supply + jetton_amount, jetton_balance, state, price, cap, withdraw_minimum, start_date, end_date, admin_address, jetton_wallet_addr, content, jetton_wallet_code);
     return ();
   }
 
@@ -152,7 +194,7 @@ int multiply_f(int a, int b) { ;; multiply with factor
     int jetton_amount = in_msg_body~load_coins();
     slice from_address = in_msg_body~load_msg_addr();
     throw_unless(error::unauthorized_burn_request, equal_slice_bits(calc_user_wallet(from_address, my_address(), jetton_wallet_code), sender_address));
-    save_data(total_supply - jetton_amount, state, price, cap, withdraw_minimum, start_date, end_date, admin_address, content, jetton_wallet_code);
+    save_data(total_supply - jetton_amount, jetton_balance, state, price, cap, withdraw_minimum, start_date, end_date, admin_address, jetton_wallet_addr, content, jetton_wallet_code);
     slice response_address = in_msg_body~load_msg_addr();
     if (response_address.preload_uint(2) != 0) {
       var msg = begin_cell()
@@ -197,21 +239,21 @@ int multiply_f(int a, int b) { ;; multiply with factor
   if (op == op::change_admin) {
     throw_unless(error::unauthorized_change_admin_request, equal_slice_bits(sender_address, admin_address));
     slice new_admin_address = in_msg_body~load_msg_addr();
-    save_data(total_supply, state, price, cap, withdraw_minimum, start_date, end_date, new_admin_address, content, jetton_wallet_code);
+    save_data(total_supply, jetton_balance, state, price, cap, withdraw_minimum, start_date, end_date, new_admin_address, jetton_wallet_addr, content, jetton_wallet_code);
     return ();
   }
 
   ;; change_content#11067aba query_id:uint64 new_content:Cell = InternalMsgBody;
   if (op == op::change_content) {
     throw_unless(error::unauthorized_change_content_request, equal_slice_bits(sender_address, admin_address));
-    save_data(total_supply, state, price, cap, withdraw_minimum, start_date, end_date, admin_address, in_msg_body~load_ref(), jetton_wallet_code);
+    save_data(total_supply, jetton_balance, state, price, cap, withdraw_minimum, start_date, end_date, admin_address, jetton_wallet_addr, in_msg_body~load_ref(), jetton_wallet_code);
     return ();
   }
 
   ;; change_state#58ca5361 query_id:uint64 state:uint1 = InternalMsgBody;
   if (op == op::change_state) {
     throw_unless(error::unauthorized_change_content_request, equal_slice_bits(sender_address, admin_address));
-    save_data(total_supply, in_msg_body~load_uint(1), price, cap, withdraw_minimum, start_date, end_date, admin_address, content, jetton_wallet_code);
+    save_data(total_supply, jetton_balance, in_msg_body~load_uint(1), price, cap, withdraw_minimum, start_date, end_date, admin_address, jetton_wallet_addr, content, jetton_wallet_code);
     return ();
   }
 
@@ -232,43 +274,48 @@ int multiply_f(int a, int b) { ;; multiply with factor
   }
 
   if (op == op::change_price){
-    throw_unless(error::unauthorized_withdraw_request, equal_slice_bits(sender_address, admin_address));
-    save_data(total_supply, state, in_msg_body~load_coins(), cap, withdraw_minimum, start_date, end_date, admin_address, content, jetton_wallet_code);
+    throw_unless(error::unauthorized_change_price_request, equal_slice_bits(sender_address, admin_address));
+    save_data(total_supply, jetton_balance, state, in_msg_body~load_coins(), cap, withdraw_minimum, start_date, end_date, admin_address, jetton_wallet_addr, content, jetton_wallet_code);
     return ();
   }
 
   if (op == op::change_minimum_withdraw){
-    throw_unless(error::unauthorized_withdraw_request, equal_slice_bits(sender_address, admin_address));
-    save_data(total_supply, state, price, cap, in_msg_body~load_coins(), start_date, end_date, admin_address, content, jetton_wallet_code);
+    throw_unless(error::unauthorized_change_withdraw_request, equal_slice_bits(sender_address, admin_address));
+    save_data(total_supply, jetton_balance, state, price, cap, in_msg_body~load_coins(), start_date, end_date, admin_address, jetton_wallet_addr, content, jetton_wallet_code);
     return ();
   }
 
-  (int balance, _) = get_balance().unpair();
-  if (balance > withdraw_minimum + min_tons_for_storage)
-  {
+  if (op == op::get_jetton_minter_addr){
+    throw_unless(error::jetton_wallet_already_specified, equal_slices(jetton_wallet_addr, null_addr()));
+    throw_unless(error::unauthorized_change_withdraw_request, equal_slice_bits(sender_address, admin_address));
     raw_reserve(min_tons_for_storage , 0);
-    cell message_body = begin_cell() ;; Creating a cell with message
-                        .store_uint(0, 32)
-                        .store_slice("withdrawal")
-                        .end_cell();
-    var msg = begin_cell()
-                .store_msg_flag(msg_flag::non_bounceable)
-                .store_slice(admin_address)
-                .store_coins(0)
-                .store_msgbody_prefix_ref(message_body);
-    return send_raw_message(msg.end_cell(), CARRY_REMAINING_BALANCE | IGNORE_ERRORS);
+    slice jetton_minter = in_msg_body~load_msg_addr();
+    cell msg_body = begin_cell().store_uint(op::provide_wallet_address, 32)
+                              .store_uint(query_id, 64)
+                              .store_slice(my_address())
+                              .store_uint(0, 1)
+                              .end_cell();
+    send_simple_message(0, jetton_minter, msg_body, 64);
+    save_data(total_supply, jetton_balance, state, price, cap, withdraw_minimum, start_date, end_date, admin_address, jetton_minter, content, jetton_wallet_code);
+  }
+
+  if (op == op::get_jetton_wallet_addr){
+    throw_unless(error::unauthorized_change_jetton_wallet_request, equal_slices(sender_address, jetton_wallet_addr));
+    slice new_jetton_wallet_addr = in_msg_body~load_msg_addr();
+    save_data(total_supply, jetton_balance, state, price, cap, withdraw_minimum, start_date, end_date, admin_address, new_jetton_wallet_addr, content, jetton_wallet_code);
+
   }
 
   throw(error::unknown_op);
 }
 
 (int, int, int, int, int, int) get_ico_data() method_id {
-  (int total_supply, int state, int price, int cap, int withdraw_minimum, int start_date, int end_date, slice admin_address, cell content, cell jetton_wallet_code) = load_data();
+  (int total_supply, int jetton_balance, int state, int price, int cap, int withdraw_minimum, int start_date, int end_date, slice admin_address, slice jetton_wallet_addr, cell content, cell jetton_wallet_code) = load_data();
   return (state, price, cap, withdraw_minimum, start_date, end_date);
 }
 
 int get_jetton_amount(int ton_amount) method_id {
-  (int total_supply, int state, int price, int cap, int withdraw_minimum, int start_date, int end_date, slice admin_address, cell content, cell jetton_wallet_code) = load_data();
+  (int total_supply, int jetton_balance, int state, int price, int cap, int withdraw_minimum, int start_date, int end_date, slice admin_address, slice jetton_wallet_addr, cell content, cell jetton_wallet_code) = load_data();
   int buy_amount = ton_amount - min_tons_for_storage;
   throw_unless(error::min_amount, buy_amount > 0);
 
@@ -277,11 +324,11 @@ int get_jetton_amount(int ton_amount) method_id {
 }
 
 (int, int, slice, cell, cell) get_jetton_data() method_id {
-  (int total_supply, int state, int price, int cap, int withdraw_minimum, int start_date, int end_date, slice admin_address, cell content, cell jetton_wallet_code) = load_data();
+  (int total_supply, int jetton_balance, int state, int price, int cap, int withdraw_minimum, int start_date, int end_date, slice admin_address, slice jetton_wallet_addr, cell content, cell jetton_wallet_code) = load_data();
   return (total_supply, -1, admin_address, content, jetton_wallet_code);
 }
 
 slice get_wallet_address(slice owner_address) method_id {
-  (int total_supply, int state, int price, int cap, int withdraw_minimum, int start_date, int end_date, slice admin_address, cell content, cell jetton_wallet_code) = load_data();
+  (int total_supply, int jetton_balance, int state, int price, int cap, int withdraw_minimum, int start_date, int end_date, slice admin_address, slice jetton_wallet_addr, cell content, cell jetton_wallet_code) = load_data();
   return calc_user_wallet(owner_address, my_address(), jetton_wallet_code);
 }
