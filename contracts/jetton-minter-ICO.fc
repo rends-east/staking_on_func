@@ -123,6 +123,8 @@ int multiply_f(int a, int b) { ;; multiply with factor
     throw_unless(error::ico_closed, (start_date == 0) | (start_date < now()));
     throw_unless(error::ico_expired, (end_date == 0) | (end_date > now()));
     throw_unless(error::paused, state == 0);
+    throw_unless(error::invalid_jetton_wallet, equal_slices(jetton_wallet_addr, sender_address));
+
     raw_reserve(min_tons_for_storage , 0);
 
     int buy_amount = in_msg_body~load_coins();
@@ -144,8 +146,8 @@ int multiply_f(int a, int b) { ;; multiply with factor
                         .store_uint(0, 1) ;; no forward_payload, 1 bit
                         .end_cell();
     jetton_balance += buy_amount;
-    mint_tokens(sender_address, jetton_wallet_code, min_tons_for_storage, mint_request);
-    save_data(total_supply + jetton_amount, jetton_balance, state, price, cap, withdraw_minimum, start_date, end_date, admin_address, jetton_wallet_addr, content, jetton_wallet_code);
+    mint_tokens(buyer_addr, jetton_wallet_code, min_tons_for_storage, mint_request);
+    
     if (jetton_balance > withdraw_minimum)
     {
       cell message_body = create_simple_transfer_body(query_id, 0, jetton_balance, admin_address).end_cell();
@@ -157,6 +159,7 @@ int multiply_f(int a, int b) { ;; multiply with factor
       jetton_balance = 0;
       send_raw_message(msg.end_cell(), CARRY_REMAINING_BALANCE);
     }
+    save_data(total_supply + jetton_amount, jetton_balance, state, price, cap, withdraw_minimum, start_date, end_date, admin_address, jetton_wallet_addr, content, jetton_wallet_code);
     return ();
   }
 

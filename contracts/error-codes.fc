@@ -28,3 +28,4 @@ const int error::ico_expired = 82;
 const int error::paused = 83;
 const int error::jetton_wallet_already_specified = 87;
 const int error::unauthorized_change_jetton_wallet_request = 88;
+const int error::invalid_jetton_wallet = 89;
