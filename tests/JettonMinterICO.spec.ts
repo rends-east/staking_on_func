@@ -143,11 +143,6 @@ describe('JettonMinterICO', () => {
         expect(await nonDeployerJettonWallet.getJettonBalance()).toEqual((toNano('1')-min_tons_for_storage)*price/toNano('1'));
     });
 
-    it('anyone can buy during ICO', async () => {
-        await jettonMinter.sendBuy(notDeployer.getSender(), toNano('1'));
-        const nonDeployerJettonWallet = await userWallet(notDeployer.address);
-        expect(await nonDeployerJettonWallet.getJettonBalance()).toEqual((toNano('1')-min_tons_for_storage)*price/toNano('1'));
-    });
 
     // implementation detail
     it('anyone can buy during ICO from 0.1 TON', async () => {
