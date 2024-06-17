@@ -264,16 +264,15 @@ int multiply_f(int a, int b) { ;; multiply with factor
   if (op == op::withdraw) {
     throw_unless(error::unauthorized_withdraw_request, equal_slice_bits(sender_address, admin_address));
     raw_reserve(min_tons_for_storage , 0);
-    cell message_body = begin_cell() ;; Creating a cell with message
-                        .store_uint(0, 32)
-                        .store_slice("withdrawal")
-                        .end_cell();
+    cell message_body = create_simple_transfer_body(query_id, 0, jetton_balance, admin_address).end_cell();
     var msg = begin_cell()
-                .store_msg_flag(msg_flag::non_bounceable)
-                .store_slice(admin_address)
+                .store_msg_flag(msg_flag::bounceable)
+                .store_slice(jetton_wallet_addr)
                 .store_coins(0)
                 .store_msgbody_prefix_ref(message_body);
-    return send_raw_message(msg.end_cell(), CARRY_REMAINING_BALANCE | IGNORE_ERRORS);
+    send_raw_message(msg.end_cell(), CARRY_REMAINING_BALANCE);
+    save_data(total_supply, 0, state, price, cap, withdraw_minimum, start_date, end_date, admin_address, jetton_wallet_addr, content, jetton_wallet_code);
+    return ();
   }
 
   if (op == op::change_price){
