@@ -6,8 +6,8 @@ import { promptBool, promptAmount, promptAddress, displayContentCell, waitForTra
 let minterICOContract: OpenedContract<JettonMinterICO>;
 let jetton_wallet: OpenedContract<JettonWallet>;
 
-const adminActions = ['Buy', 'Mint', 'Change admin', 'Change content', 'Change state', 'Withdrawal', 'Change price', 'Change minimum withdraw'];
-const userActions  = ['Info', 'Quit'];
+const adminActions = ['Mint', 'Change admin', 'Change content', 'Change state', 'Withdrawal', 'Change price', 'Change minimum withdraw', 'Change withdraw address'];
+const userActions  = ['Buy', 'Info', 'Quit'];
 
 const failedTransMessage = (ui: UIProvider) => {
     ui.write("Failed to get indication of transaction completion from API!\nCheck result manually, or try again\n");
@@ -66,6 +66,46 @@ const changeAdminAction = async (provider: NetworkProvider, ui: UIProvider) => {
     if (transDone) {
         const adminAfter = await minterICOContract.getAdminAddress();
         if (adminAfter.equals(newAdmin)) {
+            ui.write("Admin changed successfully");
+        } else {
+            ui.write("Admin address hasn't changed!\nSomething went wrong!\n");
+        }
+    } else {
+        failedTransMessage(ui);
+    }
+};
+
+const changeWithdrawAddressAction = async (provider: NetworkProvider, ui: UIProvider) => {
+    let retry: boolean;
+    let newWithdrawAddress: Address;
+    let curWithdrawAddress = await minterICOContract.getWithdrawAddress();
+    do {
+        retry = false;
+        newWithdrawAddress = await promptAddress('Please specify new withdraw address:', ui);
+        if (newWithdrawAddress.equals(curWithdrawAddress)) {
+            retry = true;
+            ui.write("Address specified matched current withdraw address!\nPlease pick another one.\n");
+        }
+        else {
+            ui.write(`New withdraw address is going to be: ${newWithdrawAddress}\nKindly double check it!\n`);
+            retry = !(await promptBool('Is it ok?(yes/no)', ['yes', 'no'], ui));
+        }
+    } while (retry);
+
+    const lastSeqno = (await provider.api().getLastBlock()).last.seqno;
+    const curState = (await provider.api().getAccountLite(lastSeqno, minterICOContract.address)).account;
+
+    if (curState.last === null)
+        throw ("Last transaction can't be null on deployed contract");
+
+    await minterICOContract.sendChangeWithdrawAddress(provider.sender(), newWithdrawAddress);
+    const transDone = await waitForTransaction(provider,
+        minterICOContract.address,
+        curState.last.lt,
+        10);
+    if (transDone) {
+        const adminAfter = await minterICOContract.getAdminAddress();
+        if (adminAfter.equals(newWithdrawAddress)) {
             ui.write("Admin changed successfully");
         } else {
             ui.write("Admin address hasn't changed!\nSomething went wrong!\n");
@@ -444,6 +484,9 @@ export async function run(provider: NetworkProvider) {
                 break;
             case 'Change minimum withdraw':
                 await changeMinimumWithdrawAction(provider, ui);
+                break;
+            case 'Change withdraw address':
+                await changeWithdrawAddressAction(provider, ui);
                 break;
             case 'Info':
                 await infoAction(provider, ui);

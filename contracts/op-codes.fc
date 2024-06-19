@@ -21,7 +21,7 @@ const int op::change_price = "op::change_price"c;
 const int op::change_minimum_withdraw = "op::change_minimum_withdraw"c;
 const int op::get_jetton_wallet_addr = 0xd1735400;
 const int op::get_jetton_minter_addr = "op::get_jetton_minter_addr"c;
-
+const int op::change_withdraw_address = "op::change_withdraw_address"c;
 
 (slice, (int)) ~load_op(slice s) inline { return s.load_uint(32); }
 (slice, (int)) ~load_query_id(slice s) inline { return s.load_uint(64); }

@@ -8,19 +8,23 @@ export type JettonMinterICOContent = {
 export type JettonMinterICOConfig = { admin: Address; content: Cell; wallet_code: Cell, state: number, price: bigint, cap: bigint, ico_start_date: number, ico_end_date: number };
 
 export function jettonMinterConfigToCell(config: JettonMinterICOConfig): Cell {
-    return beginCell()
-        .storeCoins(0)
+    return beginCell().storeRef(
+        beginCell().storeCoins(0)
         .storeBit(config.state)
         .storeCoins(0)
         .storeUint(config.price, 64)
         .storeUint(config.cap, 64)
-        .storeCoins(1000000000)
+        .storeCoins(0)
         .storeUint(config.ico_start_date, 32)
         .storeUint(config.ico_end_date, 32)
+        .endCell())
+        .storeRef(
+        beginCell().storeAddress(config.admin)
         .storeAddress(config.admin)
         .storeAddress(address("0:0000000000000000000000000000000000000000000000000000000000000000"))
         .storeRef(config.content)
         .storeRef(config.wallet_code)
+        .endCell())
         .endCell();
 }
 
@@ -97,6 +101,20 @@ export class JettonMinterICO implements Contract {
         await provider.internal(via, {
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: JettonMinterICO.changeAdminMessage(newOwner),
+            value: toNano("0.1"),
+        });
+    }
+
+    static changeWithdrawAddressMessage(newWithdrawAddress: Address) {
+        return beginCell().storeUint(0x4f9d828b, 32).storeUint(0, 64) // op, queryId
+            .storeAddress(newWithdrawAddress)
+            .endCell();
+    }
+
+    async sendChangeWithdrawAddress(provider: ContractProvider, via: Sender, newWithdrawAddress: Address) {
+        await provider.internal(via, {
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: JettonMinterICO.changeWithdrawAddressMessage(newWithdrawAddress),
             value: toNano("0.1"),
         });
     }
@@ -213,6 +231,12 @@ export class JettonMinterICO implements Contract {
     async getAdminAddress(provider: ContractProvider) {
         let res = await this.getJettonData(provider);
         return res.adminAddress;
+    }
+
+    async getWithdrawAddress(provider: ContractProvider) {
+        let res = await provider.get('get_withdraw_address', []);
+        let WithdrawAddress = res.stack.readAddress();
+        return WithdrawAddress;
     }
 
     async getJtnWalletAddress(provider: ContractProvider) {
