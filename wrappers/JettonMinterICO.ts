@@ -159,7 +159,7 @@ export class JettonMinterICO implements Contract {
     }
     
     static changePriceMessage(newPrice: bigint) {
-        return beginCell().storeUint(0xf4463799, 32).storeUint(newPrice, 64) // op, queryId
+        return beginCell().storeUint(0xf4463799, 32).storeUint(0, 64).storeUint(newPrice, 64) // op, queryId
             .endCell();
     }
 
@@ -172,14 +172,14 @@ export class JettonMinterICO implements Contract {
     }
 
     static changeWithdrawMessage(newWithdrawMinimum: bigint) {
-        return beginCell().storeUint(0xf4463799, 32).storeCoins(newWithdrawMinimum) // op, queryId
+        return beginCell().storeUint(0x6f45070e, 32).storeUint(0, 64).storeCoins(newWithdrawMinimum) // op, queryId
             .endCell();
     }
 
     async sendChangeWithdraw(provider: ContractProvider, via: Sender, newWithdrawMinimum: bigint) {
         await provider.internal(via, {
             sendMode: SendMode.PAY_GAS_SEPARATELY,
-            body: JettonMinterICO.changePriceMessage(newWithdrawMinimum),
+            body: JettonMinterICO.changeWithdrawMessage(newWithdrawMinimum),
             value: toNano('0.2')
         });
     }

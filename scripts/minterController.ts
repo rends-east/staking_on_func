@@ -6,7 +6,7 @@ import { promptBool, promptAmount, promptAddress, displayContentCell, waitForTra
 let minterICOContract: OpenedContract<JettonMinterICO>;
 let jetton_wallet: OpenedContract<JettonWallet>;
 
-const adminActions = ['Buy', 'Mint', 'Change admin', 'Change content', 'Change state', 'Withdrawal'];
+const adminActions = ['Buy', 'Mint', 'Change admin', 'Change content', 'Change state', 'Withdrawal', 'Change price', 'Change minimum withdraw'];
 const userActions  = ['Info', 'Quit'];
 
 const failedTransMessage = (ui: UIProvider) => {
@@ -289,6 +289,90 @@ const withdrawalAction = async (provider: NetworkProvider, ui: UIProvider) => {
     }
 }
 
+const changePriceAction = async (provider: NetworkProvider, ui: UIProvider) => {
+    const sender = provider.sender();
+    let retry: boolean;
+    let newPrice: string;
+    let forwardAmount: string;
+
+    do {
+        retry = false;
+        const fallbackAddr = sender.address ?? await minterICOContract.getAdminAddress();
+        newPrice = await promptAmount('Please provide new price in decimal form:', ui);
+        ui.write(`Change price to ${newPrice}?\n`);
+        retry = !(await promptBool('Is it ok?(yes/no)', ['yes', 'no'], ui));
+    } while (retry);
+
+    ui.write(`Changing price to ${newPrice}?\n`);
+    const nanoPrice = toNano(newPrice);
+    
+    const lastSeqno = (await provider.api().getLastBlock()).last.seqno;
+    const curState = (await provider.api().getAccountLite(lastSeqno, minterICOContract.address)).account;
+
+    if (curState.last === null)
+        throw ("Last transaction can't be null on deployed contract");
+
+    const res = await minterICOContract.sendChangePrice(sender, nanoPrice);
+    const gotTrans = await waitForTransaction(provider,
+        minterICOContract.address,
+        curState.last.lt,
+        10);
+    if (gotTrans) {
+        const PriceAfter = await minterICOContract.getICOPrice();
+        if (PriceAfter == nanoPrice) {
+            ui.write("Change successfull!\nCurrent price:" + fromNano(nanoPrice));
+        }
+        else {
+            ui.write("Change failed!");
+        }
+    }
+    else {
+        failedTransMessage(ui);
+    }
+}
+
+const changeMinimumWithdrawAction = async (provider: NetworkProvider, ui: UIProvider) => {
+    const sender = provider.sender();
+    let retry: boolean;
+    let newWithdraw: string;
+    let forwardAmount: string;
+
+    do {
+        retry = false;
+        const fallbackAddr = sender.address ?? await minterICOContract.getAdminAddress();
+        newWithdraw = await promptAmount('Please provide minimum withdraw amount in decimal form:', ui);
+        ui.write(`Change minimum withdraw to ${newWithdraw}?\n`);
+        retry = !(await promptBool('Is it ok?(yes/no)', ['yes', 'no'], ui));
+    } while (retry);
+
+    ui.write(`Changing minimum withdraw to ${newWithdraw}?\n`);
+    const nanoMinimumWithdraw = toNano(newWithdraw);
+    
+    const lastSeqno = (await provider.api().getLastBlock()).last.seqno;
+    const curState = (await provider.api().getAccountLite(lastSeqno, minterICOContract.address)).account;
+
+    if (curState.last === null)
+        throw ("Last transaction can't be null on deployed contract");
+
+    const res = await minterICOContract.sendChangeWithdraw(sender, nanoMinimumWithdraw);
+    const gotTrans = await waitForTransaction(provider,
+        minterICOContract.address,
+        curState.last.lt,
+        10);
+    if (gotTrans) {
+        const WithdrawAfter = await minterICOContract.getICOWithdrawMinimum();
+        if (WithdrawAfter == nanoMinimumWithdraw) {
+            ui.write("Change successfull!\nCurrent minimum autowithdraw:" + fromNano(nanoMinimumWithdraw));
+        }
+        else {
+            ui.write("Change failed!");
+        }
+    }
+    else {
+        failedTransMessage(ui);
+    }
+}
+
 export async function run(provider: NetworkProvider) {
     const ui = provider.ui();
     const sender = provider.sender();
@@ -354,6 +438,12 @@ export async function run(provider: NetworkProvider) {
                 break;
             case 'Change state':
                 await changeStateAction(provider, ui);
+                break;
+            case 'Change price':
+                await changePriceAction(provider, ui);
+                break;
+            case 'Change minimum withdraw':
+                await changeMinimumWithdrawAction(provider, ui);
                 break;
             case 'Info':
                 await infoAction(provider, ui);
