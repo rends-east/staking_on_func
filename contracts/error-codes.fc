@@ -11,7 +11,7 @@ const int error::burn_fee_not_matched = 710;
 const int error::unknown_action = 0xFFFF;
 const int error::unknown_action_bounced = 0xFFF0;
 
-;; jetton ICO minter errors
+;; staking jetton minter errors
 const int error::unauthorized_mint_request = 73;
 const int error::unauthorized_burn_request = 74;
 const int error::discovery_fee_not_matched = 75;
@@ -22,9 +22,6 @@ const int error::unauthorized_change_withdraw_request = 84;
 const int error::unauthorized_change_price_request = 85;
 const int error::unauthorized_set_jetton_wallet_request = 86;
 const int error::min_amount = 79;
-const int error::cap_exceeded = 80;
-const int error::ico_closed = 81;
-const int error::ico_expired = 82;
 const int error::paused = 83;
 const int error::jetton_wallet_already_specified = 87;
 const int error::unauthorized_change_jetton_wallet_request = 88;

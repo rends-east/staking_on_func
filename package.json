@@ -1,11 +1,11 @@
 {
-    "name": "ton-ico-on-func",
+    "name": "ton-staking-on-func",
     "version": "1.0.1",
     "license": "MIT",
     "scripts": {
         "test": "jest",
         "build": "yarn blueprint build",
-        "deploy": "yarn blueprint run deployICO",
+        "deploy": "yarn blueprint run deployStaking",
         "controller": "yarn blueprint run minterController"
     },
     "devDependencies": {

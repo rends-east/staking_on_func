@@ -2,31 +2,31 @@ import 'dotenv/config';
 import { Blockchain, SandboxContract, TreasuryContract, Verbosity, internal } from '@ton/sandbox';
 import { Cell, toNano, beginCell, Address, SendMode } from '@ton/core';
 import { JettonWallet } from '../wrappers/JettonWallet';
-import { JettonMinterICO, jettonContentToCell } from '../wrappers/JettonMinterICO';
+import { JettonMinterStaking, jettonContentToCell } from '../wrappers/JettonMinterStaking';
 import '@ton/test-utils';
 import { compile } from '@ton/blueprint';
 
 //jetton params
 let min_tons_for_storage = 10000000n;
 
-describe('JettonMinterICO', () => {
+describe('JettonMinterStaking', () => {
     let wallet_code: Cell;
     let minter_code: Cell;
     let blockchain: Blockchain;
     let deployer:SandboxContract<TreasuryContract>;
     let notDeployer:SandboxContract<TreasuryContract>;
-    let jettonMinter:SandboxContract<JettonMinterICO>;
+    let jettonMinter:SandboxContract<JettonMinterStaking>;
     let userWallet:any;
     let content:Cell;
     let state:number;
     let price:bigint;
     let cap:bigint;
     let withdraw_minimum:bigint;
-    let ico_start_date:number;
-    let ico_end_date:number;
+    let Staking_start_date:number;
+    let Staking_end_date:number;
 
     beforeAll(async () => {
-        minter_code    = await compile('JettonMinterICO');
+        minter_code    = await compile('JettonMinterStaking');
         blockchain     = await Blockchain.create();
         deployer       = await blockchain.treasury('deployer');
         notDeployer    = await blockchain.treasury('notDeployer');
@@ -36,20 +36,17 @@ describe('JettonMinterICO', () => {
         price          = process.env.JETTON_PRICE ? BigInt(process.env.JETTON_PRICE).valueOf() : BigInt(1000000000);
         cap            = process.env.JETTON_CAP ? BigInt(process.env.JETTON_CAP).valueOf() : BigInt(1000000000);
         withdraw_minimum = process.env.WITHDRAW_MINIMUM ? BigInt(process.env.WITHDRAW_MINIMUM).valueOf() : BigInt(1000000000);
-        ico_start_date = process.env.JETTON_ICO_START_DATE ? Number(process.env.JETTON_ICO_START_DATE).valueOf() : 0;
-        ico_end_date   = process.env.JETTON_ICO_END_DATE ? Number(process.env.JETTON_ICO_END_DATE).valueOf() : 0;
+        Staking_start_date = process.env.JETTON_Staking_START_DATE ? Number(process.env.JETTON_Staking_START_DATE).valueOf() : 0;
+        Staking_end_date   = process.env.JETTON_Staking_END_DATE ? Number(process.env.JETTON_Staking_END_DATE).valueOf() : 0;
 
         jettonMinter   = blockchain.openContract(
-                   JettonMinterICO.createFromConfig(
+                   JettonMinterStaking.createFromConfig(
                      {
                        admin: deployer.address,
                        state,
                        content,
                        wallet_code,
                        price: price as bigint,
-                       cap: cap as bigint,
-                       ico_start_date,
-                       ico_end_date,
                      },
                      minter_code));
         userWallet = async (address:Address) => blockchain.openContract(
@@ -70,24 +67,21 @@ describe('JettonMinterICO', () => {
         });
     });
     // implementation detail
-    it('check that all ICO parameters are ok', async () => {
-        expect(await jettonMinter.getICOState()).toEqual(Boolean(state));
-        expect(await jettonMinter.getICOPrice()).toEqual(price);
-        expect(await jettonMinter.getICOCap()).toEqual(cap);
-        expect(await jettonMinter.getICOWithdrawMinimum()).toEqual(withdraw_minimum);
-        expect(await jettonMinter.getICOStartDate()).toEqual(ico_start_date);
-        expect(await jettonMinter.getICOEndDate()).toEqual(ico_end_date);
+    it('check that all Staking parameters are ok', async () => {
+        expect(await jettonMinter.getStakingState()).toEqual(Boolean(state));
+        expect(await jettonMinter.getStakingPrice()).toEqual(price);
+        expect(await jettonMinter.getStakingWithdrawMinimum()).toEqual(withdraw_minimum);
     });
     // implementation detail
     it('minter admin can change state', async () => {
         let changeState = await jettonMinter.sendChangeState(deployer.getSender(), true);
-        expect(await jettonMinter.getICOState()).toBe(true);
+        expect(await jettonMinter.getStakingState()).toBe(true);
         changeState = await jettonMinter.sendChangeState(deployer.getSender(), false);
-        expect(await jettonMinter.getICOState()).toBe(false);
+        expect(await jettonMinter.getStakingState()).toBe(false);
     });
     it('not a minter admin can not change state', async () => {
         let changeState = await jettonMinter.sendChangeState(notDeployer.getSender(), true);
-        expect(await jettonMinter.getICOState()).toBe(false);
+        expect(await jettonMinter.getStakingState()).toBe(false);
         expect(changeState.transactions).toHaveTransaction({
             from: notDeployer.address,
             to: jettonMinter.address,
@@ -137,7 +131,7 @@ describe('JettonMinterICO', () => {
         expect(jettonAmount).toEqual((toNano('0.19999999')-min_tons_for_storage)*price/toNano('1'));
     });
     // implementation detail
-    it('anyone can buy during ICO', async () => {
+    it('anyone can buy during Staking', async () => {
         await jettonMinter.sendBuy(notDeployer.getSender(), toNano('1'));
         const nonDeployerJettonWallet = await userWallet(notDeployer.address);
         expect(await nonDeployerJettonWallet.getJettonBalance()).toEqual((toNano('1')-min_tons_for_storage)*price/toNano('1'));
@@ -145,7 +139,7 @@ describe('JettonMinterICO', () => {
 
 
     // implementation detail
-    it('anyone can buy during ICO from 0.1 TON', async () => {
+    it('anyone can buy during Staking from 0.1 TON', async () => {
         let buyOn = toNano('0.1');
         await jettonMinter.sendBuy(notDeployer.getSender(), buyOn);
         const nonDeployerJettonWallet = await userWallet(notDeployer.address);
@@ -174,25 +168,25 @@ describe('JettonMinterICO', () => {
     });
     // implementation detail
     it('impossible to buy before start, if it is not 0', async () => {
-        if (ico_start_date != 0 ) {
+        if (Staking_start_date != 0 ) {
             let buy = await jettonMinter.sendBuy(notDeployer.getSender(), toNano('1'));
             expect(buy.transactions).toHaveTransaction({
                 from: notDeployer.address,
                 to: jettonMinter.address,
                 aborted: true,
-                exitCode: 81, // error::ico_closed
+                exitCode: 81, // error::Staking_closed
             });
         }
     });
     // implementation detail
     it('impossible to buy after end, if it is not 0', async () => {
-        if (ico_end_date != 0 ) {
+        if (Staking_end_date != 0 ) {
             let buy = await jettonMinter.sendBuy(notDeployer.getSender(), toNano('1'));
             expect(buy.transactions).toHaveTransaction({
                 from: notDeployer.address,
                 to: jettonMinter.address,
                 aborted: true,
-                exitCode: 82, // error::ico_expired
+                exitCode: 82, // error::Staking_expired
             });
         }
     });

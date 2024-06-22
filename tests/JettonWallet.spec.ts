@@ -2,7 +2,7 @@ import 'dotenv/config';
 import { Blockchain, SandboxContract, TreasuryContract, Verbosity, internal } from '@ton/sandbox';
 import { Cell, toNano, beginCell, Address, SendMode } from '@ton/core';
 import { JettonWallet } from '../wrappers/JettonWallet';
-import { JettonMinterICO, jettonContentToCell } from '../wrappers/JettonMinterICO';
+import { JettonMinterStaking, jettonContentToCell } from '../wrappers/JettonMinterStaking';
 import '@ton/test-utils';
 import { compile } from '@ton/blueprint';
 import { randomAddress, getRandomTon } from './utils';
@@ -26,17 +26,15 @@ describe('JettonWallet', () => {
     let blockchain: Blockchain;
     let deployer: SandboxContract<TreasuryContract>;
     let notDeployer: SandboxContract<TreasuryContract>;
-    let jettonMinter: SandboxContract<JettonMinterICO>;
+    let jettonMinter: SandboxContract<JettonMinterStaking>;
     let userWallet: any;
     let content: Cell;
     let state: number;
     let price: BigInt;
-    let cap: BigInt;
-    let ico_start_date: number;
-    let ico_end_date: number;
+
 
     beforeAll(async () => {
-        minter_code = await compile('JettonMinterICO');
+        minter_code = await compile('JettonMinterStaking');
         blockchain = await Blockchain.create();
         deployer = await blockchain.treasury('deployer');
         notDeployer = await blockchain.treasury('notDeployer');
@@ -45,11 +43,11 @@ describe('JettonWallet', () => {
         state = process.env.JETTON_STATE ? Number(process.env.JETTON_STATE).valueOf() : 0;
         price = process.env.JETTON_PRICE ? BigInt(process.env.JETTON_PRICE).valueOf() : BigInt(1000000000);
         cap = process.env.JETTON_CAP ? BigInt(process.env.JETTON_CAP).valueOf() : BigInt(1000000000);
-        ico_start_date = process.env.JETTON_ICO_START_DATE ? Number(process.env.JETTON_ICO_START_DATE).valueOf() : 0;
-        ico_end_date = process.env.JETTON_ICO_END_DATE ? Number(process.env.JETTON_ICO_END_DATE).valueOf() : 0;
+        Staking_start_date = process.env.JETTON_Staking_START_DATE ? Number(process.env.JETTON_Staking_START_DATE).valueOf() : 0;
+        Staking_end_date = process.env.JETTON_Staking_END_DATE ? Number(process.env.JETTON_Staking_END_DATE).valueOf() : 0;
 
         jettonMinter = blockchain.openContract(
-            JettonMinterICO.createFromConfig(
+            JettonMinterStaking.createFromConfig(
                 {
                     admin: deployer.address,
                     state,
@@ -57,8 +55,8 @@ describe('JettonWallet', () => {
                     wallet_code,
                     price: price as bigint,
                     cap: cap as bigint,
-                    ico_start_date,
-                    ico_end_date,
+                    Staking_start_date,
+                    Staking_end_date,
                 },
                 minter_code));
         userWallet = async (address: Address) => blockchain.openContract(
