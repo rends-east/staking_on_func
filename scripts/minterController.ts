@@ -7,7 +7,7 @@ let minterStakingContract: OpenedContract<JettonMinterStaking>;
 let jetton_wallet: OpenedContract<JettonWallet>;
 
 const adminActions = ['Mint', 'Change admin', 'Change content', 'Change state', 'Withdrawal', 'Change price', 'Change minimum withdraw', 'Change withdraw address'];
-const userActions  = ['Buy', 'Info', 'Quit'];
+const userActions  = ['Stake', 'Info', 'Quit'];
 
 const failedTransMessage = (ui: UIProvider) => {
     ui.write("Failed to get indication of transaction completion from API!\nCheck result manually, or try again\n");
@@ -240,7 +240,7 @@ const mintAction = async (provider: NetworkProvider, ui: UIProvider) => {
     }
 }
 
-const buyAction = async (provider: NetworkProvider, ui: UIProvider) => {
+const StakeAction = async (provider: NetworkProvider, ui: UIProvider) => {
     const sender = provider.sender();
     let retry: boolean;
     let amountToBuy: string;
@@ -269,9 +269,9 @@ const buyAction = async (provider: NetworkProvider, ui: UIProvider) => {
     
     jetton_wallet = provider.open(JettonWallet.createFromAddress(wallet_addr));
 
-    const buying_cell = beginCell().storeAddress(sender.address).endCell();
+    const staking_cell = beginCell().storeAddress(sender.address).endCell();
 
-    const res = await jetton_wallet.sendTransfer(sender, toNano("0.25"), toNano(amountToBuy), minterStakingContract.address, minterStakingContract.address, buying_cell, toNano("0.2"), beginCell().endCell());
+    const res = await jetton_wallet.sendTransfer(sender, toNano("0.25"), toNano(amountToBuy), minterStakingContract.address, minterStakingContract.address, Cell.EMPTY, toNano("0.2"), beginCell().storeUint(0xc89a3ee4, 32).endCell());
     const gotTrans = await waitForTransaction(provider,
         minterStakingContract.address,
         curState.last.lt,
@@ -280,10 +280,10 @@ const buyAction = async (provider: NetworkProvider, ui: UIProvider) => {
         const supplyAfter = await minterStakingContract.getTotalSupply();
 
         if (supplyAfter > supplyBefore) {
-            ui.write("Buying successfull!\nYou have received:" + fromNano(supplyAfter - supplyBefore));
+            ui.write("Staking successfull!\nYou have received:" + fromNano(supplyAfter - supplyBefore));
         }
         else {
-            ui.write("Buying failed!");
+            ui.write("Staking failed!");
         }
     }
     else {
@@ -486,8 +486,8 @@ export async function run(provider: NetworkProvider) {
             case 'Mint':
                 await mintAction(provider, ui);
                 break;
-            case 'Buy':
-                await buyAction(provider, ui);
+            case 'Stake':
+                await StakeAction(provider, ui);
                 break;
             case 'Withdrawal':
                 await withdrawalAction(provider, ui);

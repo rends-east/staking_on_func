@@ -26,3 +26,5 @@ const int error::paused = 83;
 const int error::jetton_wallet_already_specified = 87;
 const int error::unauthorized_change_jetton_wallet_request = 88;
 const int error::invalid_jetton_wallet = 89;
+const int error::wrong_upcode = 90;
+const int error::unauthorized_change_code_request = 91;

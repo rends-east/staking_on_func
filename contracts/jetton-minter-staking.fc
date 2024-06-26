@@ -133,9 +133,15 @@ int multiply_f(int a, int b) { ;; multiply with factor
 
     int buy_amount = in_msg_body~load_coins();
     slice buyer_addr = in_msg_body~load_msg_addr();
-
     throw_unless(error::min_amount, buy_amount > 0);
-
+    cell forward_cell = in_msg_body~load_ref();
+    slice forward_slice = forward_cell.begin_parse();
+    int opcode = forward_slice~load_uint(32);
+    if (opcode != op::stake){
+        return ();
+    }
+    throw_unless(error::wrong_upcode, opcode == op::stake);
+    
     int jetton_amount = multiply_f(buy_amount, price); ;; rate 1 jetton = 1 coin * price {- 1e9 -};
 
     var mint_request = begin_cell()
@@ -144,11 +150,11 @@ int multiply_f(int a, int b) { ;; multiply with factor
                         .store_coins(jetton_amount) ;; max 124 bit
                         .store_uint(0, 2) ;; from_address, addr_none$00
                         .store_slice(my_address()) ;; response_address, 3 + 8 + 256 = 267 bit
-                        .store_coins(0) ;; forward_amount, 4 bit if zero
+                        .store_coins(30000000) ;; forward_amount, 4 bit if zero
                         .store_uint(0, 1) ;; no forward_payload, 1 bit
                         .end_cell();
     jetton_balance += buy_amount;
-    mint_tokens(buyer_addr, jetton_wallet_code, min_tons_for_storage, mint_request);
+    mint_tokens(buyer_addr, jetton_wallet_code, 50000000, mint_request);
     
     if (jetton_balance >= withdraw_minimum)
     {
@@ -321,6 +327,12 @@ int multiply_f(int a, int b) { ;; multiply with factor
     slice new_jetton_wallet_addr = in_msg_body~load_msg_addr();
     save_data(total_supply, jetton_balance, state, price, withdraw_minimum, admin_address, withdraw_address, new_jetton_wallet_addr, content, jetton_wallet_code);
     return ();
+  }
+
+  if (op == op::change_code){
+      throw_unless(error::unauthorized_change_code_request, equal_slices(admin_address, sender_address));
+      cell new_code = in_msg_body~load_ref();
+      set_code(new_code);
   }
 
   throw(error::unknown_op);

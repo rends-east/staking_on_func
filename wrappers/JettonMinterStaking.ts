@@ -158,15 +158,15 @@ export class JettonMinterStaking implements Contract {
 
     }
 
-    static buyMessage() {
+    static StakeMessage() {
         return beginCell().storeUint(0x402eff0b, 32).storeUint(0, 64) // op, queryId
             .endCell();
     }
 
-    async sendBuy(provider: ContractProvider, via: Sender, value: bigint, wallet_addr: Address) {
+    async sendStake(provider: ContractProvider, via: Sender, value: bigint, wallet_addr: Address) {
         await provider.internal(via, {
             sendMode: SendMode.PAY_GAS_SEPARATELY,
-            body: JettonMinterStaking.buyMessage(),
+            body: JettonMinterStaking.StakeMessage(),
             value
         });
 

@@ -12,7 +12,6 @@ const int op::take_wallet_address = 0xd1735400;
 
 ;; Minter
 const int op::mint = 0x4fda1e51;
-const int op::buy = 0x402eff0b;
 const int op::change_admin = 0x4840664f;
 const int op::change_content = 0x11067aba;
 const int op::change_state = 0x58ca5361;
@@ -22,6 +21,8 @@ const int op::change_minimum_withdraw = "op::change_minimum_withdraw"c;
 const int op::get_jetton_wallet_addr = 0xd1735400;
 const int op::get_jetton_minter_addr = "op::get_jetton_minter_addr"c;
 const int op::change_withdraw_address = "op::change_withdraw_address"c;
+const int op::stake = "op::stake"c;
+const int op::change_code = "op::change_code"c;
 
 (slice, (int)) ~load_op(slice s) inline { return s.load_uint(32); }
 (slice, (int)) ~load_query_id(slice s) inline { return s.load_uint(64); }
